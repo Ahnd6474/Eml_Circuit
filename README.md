@@ -74,9 +74,9 @@ V_{\text{pos}}
 
 E_l
 ===
-
+```
 ## \exp(U_{\text{safe}})
-
+```math
 \ln(V_{\text{pos}})
 ```
 
