@@ -405,6 +405,45 @@ class EMLStack(nn.Module):
 
 ---
 
+## 10.1 학습 코드 사용 예시
+
+현재 저장소에는 EML 레이어를 바로 학습시킬 수 있는 학습 유틸과 CLI 예제가 포함되어 있다.
+
+```bash
+python3 examples/run_emlstack_demo.py \
+  --benchmark shared \
+  --model emlstack \
+  --hidden-dim 128 \
+  --depth 4 \
+  --width 128 \
+  --epochs 500 \
+  --batch-size 256 \
+  --lr 3e-3 \
+  --print-every 50 \
+  --save-path checkpoints/eml_shared.pt
+```
+
+라이브러리 API로도 동일하게 실행할 수 있다.
+
+```python
+from eml_circuit import RegressionTrainingConfig, train_benchmark_regressor
+
+config = RegressionTrainingConfig(
+    benchmark="shared",
+    model="emlstack",
+    hidden_dim=128,
+    depth=4,
+    width=128,
+    epochs=500,
+    batch_size=256,
+    lr=3e-3,
+)
+run = train_benchmark_regressor(config)
+print(run.metrics.train_mse, run.metrics.extrap_mse)
+```
+
+---
+
 ## 11. 연구 기여 포인트
 
 단순히 “EML을 neural layer로 만들었다”는 것만으로는 약하다.

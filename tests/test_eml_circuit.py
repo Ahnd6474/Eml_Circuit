@@ -13,8 +13,12 @@ from eml_circuit import (
     EMLRegressor,
     EMLResidualBlock,
     EMLStack,
+    MLPRegressor,
+    RegressionTrainingConfig,
+    build_regression_model,
     make_benchmark_dataset,
     softsign_clip,
+    train_benchmark_regressor,
 )
 
 
@@ -53,6 +57,40 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(dataset.extrap_inputs.shape, (16, 2))
         self.assertEqual(dataset.extrap_targets.shape, (16, 1))
         self.assertTrue(torch.isfinite(dataset.train_targets).all())
+
+
+class TrainingTests(unittest.TestCase):
+    def test_build_regression_model_returns_expected_type(self) -> None:
+        eml_model = build_regression_model(
+            RegressionTrainingConfig(model="emlstack", hidden_dim=16, depth=2, width=16)
+        )
+        mlp_model = build_regression_model(
+            RegressionTrainingConfig(model="mlp", hidden_dim=16, depth=2)
+        )
+        self.assertIsInstance(eml_model, EMLRegressor)
+        self.assertIsInstance(mlp_model, MLPRegressor)
+
+    def test_train_benchmark_regressor_runs_small_job(self) -> None:
+        run = train_benchmark_regressor(
+            RegressionTrainingConfig(
+                benchmark="shared",
+                model="emlstack",
+                n_train=32,
+                n_extrap=8,
+                hidden_dim=16,
+                depth=1,
+                width=16,
+                epochs=2,
+                batch_size=8,
+                print_every=10,
+                seed=0,
+                device="cpu",
+            )
+        )
+        self.assertEqual(run.dataset.train_inputs.shape, (32, 2))
+        self.assertEqual(len(run.metrics.history), 2)
+        self.assertTrue(torch.isfinite(torch.tensor(run.metrics.train_mse)))
+        self.assertTrue(torch.isfinite(torch.tensor(run.metrics.extrap_mse)))
 
 
 if __name__ == "__main__":

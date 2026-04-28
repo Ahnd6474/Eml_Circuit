@@ -2,57 +2,78 @@ from __future__ import annotations
 
 import argparse
 
-import torch
-
-from eml_circuit import EMLRegressor, MLPRegressor, fit_regression_model, make_benchmark_dataset
+from eml_circuit import (
+    RegressionTrainingConfig,
+    save_training_checkpoint,
+    train_benchmark_regressor,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train EMLStack on README benchmarks.")
     parser.add_argument("--benchmark", choices=["shared", "deep", "circuit"], default="shared")
     parser.add_argument("--model", choices=["emlstack", "mlp"], default="emlstack")
+    parser.add_argument("--n-train", type=int, default=2048)
+    parser.add_argument("--n-extrap", type=int, default=512)
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument("--depth", type=int, default=4)
     parser.add_argument("--width", type=int, default=128)
+    parser.add_argument("--c", type=float, default=5.0)
+    parser.add_argument("--eps", type=float, default=1e-4)
+    parser.add_argument("--init-scale", type=float, default=1e-3)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=3e-3)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--grad-clip-norm", type=float, default=1.0)
+    parser.add_argument("--eval-every", type=int, default=1)
+    parser.add_argument("--print-every", type=int, default=50)
+    parser.add_argument("--selection-metric", choices=["train", "extrap"], default="extrap")
+    parser.add_argument("--device", default=None)
+    parser.add_argument("--save-path", default=None)
     parser.add_argument("--seed", type=int, default=0)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    torch.manual_seed(args.seed)
-
-    dataset = make_benchmark_dataset(args.benchmark, seed=args.seed)
-    if args.model == "emlstack":
-        model = EMLRegressor(
-            hidden_dim=args.hidden_dim,
-            depth=args.depth,
-            width=args.width,
-        )
-    else:
-        model = MLPRegressor(
-            hidden_dim=args.hidden_dim,
-            depth=args.depth,
-        )
-
-    metrics = fit_regression_model(
-        model,
-        dataset.train_inputs,
-        dataset.train_targets,
-        extrap_inputs=dataset.extrap_inputs,
-        extrap_targets=dataset.extrap_targets,
+    config = RegressionTrainingConfig(
+        benchmark=args.benchmark,
+        model=args.model,
+        n_train=args.n_train,
+        n_extrap=args.n_extrap,
+        hidden_dim=args.hidden_dim,
+        depth=args.depth,
+        width=args.width,
+        c=args.c,
+        eps=args.eps,
+        init_scale=args.init_scale,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
+        weight_decay=args.weight_decay,
+        grad_clip_norm=args.grad_clip_norm,
+        eval_every=args.eval_every,
+        print_every=args.print_every,
+        selection_metric=args.selection_metric,
+        seed=args.seed,
+        device=args.device,
     )
+    run = train_benchmark_regressor(config)
 
-    print(f"benchmark={dataset.name}")
-    print(f"model={args.model}")
-    print(f"train_mse={metrics.train_mse:.6f}")
-    print(f"extrap_mse={metrics.extrap_mse:.6f}")
+    if args.save_path is not None:
+        save_training_checkpoint(args.save_path, run)
+
+    print(f"benchmark={run.dataset.name}")
+    print(f"model={config.model}")
+    print(f"device={next(run.model.parameters()).device}")
+    print(f"train_mse={run.metrics.train_mse:.6f}")
+    print(f"extrap_mse={run.metrics.extrap_mse:.6f}")
+    if run.metrics.best_epoch is not None:
+        print(f"best_epoch={run.metrics.best_epoch}")
+        print(f"best_score={run.metrics.best_score:.6f}")
+    if args.save_path is not None:
+        print(f"checkpoint={args.save_path}")
 
 
 if __name__ == "__main__":
