@@ -1,7 +1,3 @@
-# Eml_Circuit
-
-아래처럼 정리하면 됩니다. 핵심은 **EML을 activation으로 쓰는 게 아니라, EML node를 쌓는 neural circuit layer로 쓰는 것**입니다.
-
 # EMLStack: Residual EML Circuit Layer
 
 ## 1. 출발점
@@ -457,6 +453,5 @@ class EMLResidualBlock(nn.Module):
 }
 ]
 
-이 방향이면 단순한 activation 논문보다 훨씬 낫습니다. “GELU 대체”가 아니라 “tree search를 residual circuit learning으로 바꾼다”가 논문의 중심이 되어야 합니다.
 
 [1]: https://arxiv.org/pdf/2603.21852v2 "All elementary functions from a single binary operator"
