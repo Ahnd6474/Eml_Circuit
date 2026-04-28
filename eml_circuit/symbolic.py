@@ -322,6 +322,25 @@ class EMLTreeSearchRegressor(nn.Module):
                 ),
             }
 
+        if not best_selection["selected"] and candidates:
+            fallback = min(candidates, key=lambda candidate: candidate.score)
+            coefficients, bias, train_mse = self._solve_linear_readout(
+                [fallback.train_values],
+                train_targets,
+            )
+            best_selection = {
+                "selected": [fallback],
+                "coefficients": coefficients,
+                "bias": bias,
+                "train_mse": train_mse,
+                "extrap_mse": self._evaluate_selection_extrap(
+                    [fallback],
+                    coefficients,
+                    bias,
+                    extrap_targets,
+                ),
+            }
+
         return best_selection
 
     def _evaluate_selection_extrap(
@@ -384,7 +403,7 @@ class EMLTreeSearchRegressor(nn.Module):
         return coefficients, bias, mse
 
     def _bias_only_mse(self, targets: torch.Tensor) -> float:
-        baseline = torch.full_like(targets, targets.mean())
+        baseline = torch.full_like(targets, float(targets.mean()))
         return F.mse_loss(baseline, targets).item()
 
     def _safe_eml(

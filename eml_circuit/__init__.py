@@ -1,6 +1,14 @@
 """Residual EML circuit layers and benchmark utilities."""
 
-from .benchmarks import BenchmarkDataset, make_benchmark_dataset
+from .benchmarks import (
+    BenchmarkDataset,
+    BenchmarkSpec,
+    get_benchmark_spec,
+    list_benchmark_groups,
+    list_benchmark_names,
+    list_benchmark_specs,
+    make_benchmark_dataset,
+)
 from .functional import eml, positive_log_branch, softsign_clip, stabilized_eml
 from .layers import EMLResidualBlock, RMSNorm
 from .models import EMLRegressor, EMLStack, MLPRegressor
@@ -19,6 +27,7 @@ from .training import (
 
 __all__ = [
     "BenchmarkDataset",
+    "BenchmarkSpec",
     "EMLResidualBlock",
     "EMLRegressor",
     "EMLStack",
@@ -32,6 +41,10 @@ __all__ = [
     "eml",
     "evaluate_regression_mse",
     "fit_regression_model",
+    "get_benchmark_spec",
+    "list_benchmark_groups",
+    "list_benchmark_names",
+    "list_benchmark_specs",
     "infer_model_device",
     "make_benchmark_dataset",
     "positive_log_branch",

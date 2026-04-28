@@ -25,7 +25,7 @@ class RegressionMetrics:
 
 @dataclass
 class RegressionTrainingConfig:
-    benchmark: str = "shared"
+    benchmark: str = "tree_shared_subexpr_a"
     model: str = "emlstack"
     n_train: int = 2048
     n_extrap: int = 512
@@ -291,7 +291,7 @@ def train_benchmark_regressor(
             history=symbolic_result.history,
             extrap_history=symbolic_result.extrap_history,
             best_epoch=symbolic_result.best_depth,
-            best_score=symbolic_result.train_mse,
+            best_score=min(symbolic_result.history),
         )
     else:
         metrics = fit_regression_model(

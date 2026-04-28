@@ -5,14 +5,20 @@ import argparse
 from eml_circuit import (
     RegressionTrainingConfig,
     infer_model_device,
+    list_benchmark_names,
     save_training_checkpoint,
     train_benchmark_regressor,
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train EMLStack on README benchmarks.")
-    parser.add_argument("--benchmark", choices=["shared", "deep", "circuit"], default="shared")
+    benchmark_names = sorted(set(list_benchmark_names() + ["shared", "deep", "circuit"]))
+    parser = argparse.ArgumentParser(description="Train models on benchmark functions.")
+    parser.add_argument(
+        "--benchmark",
+        choices=benchmark_names,
+        default="tree_shared_subexpr_a",
+    )
     parser.add_argument("--model", choices=["emlstack", "mlp", "eml_tree"], default="emlstack")
     parser.add_argument("--n-train", type=int, default=2048)
     parser.add_argument("--n-extrap", type=int, default=512)

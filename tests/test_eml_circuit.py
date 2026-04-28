@@ -17,6 +17,8 @@ from eml_circuit import (
     MLPRegressor,
     RegressionTrainingConfig,
     build_regression_model,
+    list_benchmark_groups,
+    list_benchmark_names,
     make_benchmark_dataset,
     softsign_clip,
     train_benchmark_regressor,
@@ -51,8 +53,33 @@ class ModelTests(unittest.TestCase):
 
 
 class BenchmarkTests(unittest.TestCase):
-    def test_shared_dataset_shapes(self) -> None:
-        dataset = make_benchmark_dataset("shared", n_train=64, n_extrap=16, seed=1)
+    def test_benchmark_groups_are_exposed(self) -> None:
+        self.assertEqual(list_benchmark_groups(), ["mlp", "tree"])
+        self.assertEqual(len(list_benchmark_names("tree")), 3)
+        self.assertEqual(len(list_benchmark_names("mlp")), 3)
+
+    def test_tree_dataset_shapes(self) -> None:
+        dataset = make_benchmark_dataset(
+            "tree_shared_subexpr_a",
+            n_train=64,
+            n_extrap=16,
+            seed=1,
+        )
+        self.assertEqual(dataset.name, "tree_shared_subexpr_a")
+        self.assertEqual(dataset.train_inputs.shape, (64, 2))
+        self.assertEqual(dataset.train_targets.shape, (64, 1))
+        self.assertEqual(dataset.extrap_inputs.shape, (16, 2))
+        self.assertEqual(dataset.extrap_targets.shape, (16, 1))
+        self.assertTrue(torch.isfinite(dataset.train_targets).all())
+
+    def test_mlp_dataset_shapes(self) -> None:
+        dataset = make_benchmark_dataset(
+            "mlp_gelu_mix_a",
+            n_train=64,
+            n_extrap=16,
+            seed=1,
+        )
+        self.assertEqual(dataset.name, "mlp_gelu_mix_a")
         self.assertEqual(dataset.train_inputs.shape, (64, 2))
         self.assertEqual(dataset.train_targets.shape, (64, 1))
         self.assertEqual(dataset.extrap_inputs.shape, (16, 2))
@@ -78,7 +105,7 @@ class TrainingTests(unittest.TestCase):
     def test_train_benchmark_regressor_runs_small_job(self) -> None:
         run = train_benchmark_regressor(
             RegressionTrainingConfig(
-                benchmark="shared",
+                benchmark="mlp_gelu_mix_a",
                 model="emlstack",
                 n_train=32,
                 n_extrap=8,
@@ -100,7 +127,7 @@ class TrainingTests(unittest.TestCase):
     def test_train_tree_search_regressor_runs_small_job(self) -> None:
         run = train_benchmark_regressor(
             RegressionTrainingConfig(
-                benchmark="shared",
+                benchmark="tree_shared_subexpr_a",
                 model="eml_tree",
                 n_train=32,
                 n_extrap=8,
