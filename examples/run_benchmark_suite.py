@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import replace
 from pathlib import Path
@@ -166,7 +167,11 @@ def main() -> None:
 
     if len(devices) > 1 and len(jobs) > 1:
         max_workers = min(len(devices), len(jobs))
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        spawn_context = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=spawn_context,
+        ) as executor:
             futures = [
                 executor.submit(_run_single_job, config, save_path)
                 for config, save_path in jobs
