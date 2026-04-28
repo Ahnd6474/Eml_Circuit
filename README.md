@@ -32,8 +32,10 @@ pip install -e .
 - `hidden_dim=16`
 - `depth=2`
 - `width=None`
+- `normalize_targets=auto`
 
 `emlstack`에서 `width=None`이면 내부 EML 폭은 `max(4, hidden_dim // 2)`로 자동 결정됩니다.
+`normalize_targets=auto`이면 `tree` benchmark는 train target 기준 z-score 정규화를 적용하고, `mlp` benchmark는 원래 스케일을 유지합니다.
 
 핵심 모듈:
 
@@ -137,6 +139,7 @@ GPU가 여러 개 있으면 가능한 만큼 프로세스를 분리해서 각 �
 - `--device`
 - `--save-path` or `--save-dir`
 - `--log-dir`
+- `--normalize-targets`
 - `--no-progress`
 
 EML tree baseline 전용 옵션:
@@ -146,6 +149,11 @@ EML tree baseline 전용 옵션:
 - `--tree-max-basis-size`
 - `--tree-min-improvement`
 - `--tree-selection-pool-size`
+
+suite sweep 옵션:
+
+- `--hidden-dims`
+- `--widths`
 
 EMLStack / MLP 학습 로그는 `tqdm` 진행바와 epoch metric으로 출력됩니다. 체크포인트에는 모델 상태와 metric history가 함께 저장됩니다.
 
@@ -175,6 +183,16 @@ python3 examples/run_benchmark_suite.py \
 python3 examples/run_benchmark_suite.py \
   --benchmark-group mlp \
   --devices cuda:0 cuda:1
+```
+
+여러 capacity sweep 실행:
+
+```bash
+python3 examples/run_benchmark_suite.py \
+  --benchmark-group tree \
+  --models emlstack eml_tree \
+  --hidden-dims 8 16 \
+  --widths 4 8
 ```
 
 더 작은 EMLStack으로 실행:
@@ -208,6 +226,12 @@ suite 실행 summary도 동일하게 `hidden_dim`, `width`, `params`를 함께 �
 병렬 suite 실행 시 추가 출력:
 
 - `log`
+
+`eml_tree` 실행 시 추가 출력:
+
+- `selected_expression_count`
+- `selected_total_nodes`
+- `selected_max_depth`
 
 체크포인트 저장 시 포함되는 내용:
 

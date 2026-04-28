@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from .benchmarks import BenchmarkDataset, make_benchmark_dataset
+from .benchmarks import BenchmarkDataset, get_benchmark_spec, make_benchmark_dataset
 from .models import EMLRegressor, MLPRegressor
 from .progress import maybe_tqdm
 from .symbolic import EMLTreeSearchRegressor
@@ -46,6 +46,7 @@ class RegressionTrainingConfig:
     show_progress: bool = True
     restore_best: bool = True
     selection_metric: str = "extrap"
+    normalize_targets: str = "auto"
     tree_max_depth: int = 4
     tree_beam_width: int = 32
     tree_max_basis_size: int = 4
@@ -76,6 +77,16 @@ def infer_eml_width(hidden_dim: int, width: int | None) -> int:
 
 def count_trainable_parameters(model: torch.nn.Module) -> int:
     return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+
+
+def should_normalize_targets(benchmark: str, mode: str) -> bool:
+    if mode == "never":
+        return False
+    if mode == "always":
+        return True
+    if mode == "auto":
+        return get_benchmark_spec(benchmark).group == "tree"
+    raise ValueError(f"Unknown normalize_targets mode: {mode}")
 
 
 def evaluate_regression_mse(
@@ -289,6 +300,10 @@ def train_benchmark_regressor(
         seed=config.seed,
         device=device,
         dtype=config.dtype,
+        normalize_targets=should_normalize_targets(
+            config.benchmark,
+            config.normalize_targets,
+        ),
     )
     model = build_regression_model(config).to(device=device, dtype=config.dtype)
     if isinstance(model, EMLTreeSearchRegressor):
@@ -379,6 +394,7 @@ def save_training_checkpoint(
             "show_progress": run.config.show_progress,
             "restore_best": run.config.restore_best,
             "selection_metric": run.config.selection_metric,
+            "normalize_targets": run.config.normalize_targets,
             "tree_max_depth": run.config.tree_max_depth,
             "tree_beam_width": run.config.tree_beam_width,
             "tree_max_basis_size": run.config.tree_max_basis_size,
@@ -397,6 +413,11 @@ def save_training_checkpoint(
             "best_score": run.metrics.best_score,
         },
         "dataset_name": run.dataset.name,
+        "dataset_normalization": {
+            "normalized_targets": run.dataset.normalized_targets,
+            "target_mean": run.dataset.target_mean,
+            "target_std": run.dataset.target_std,
+        },
         "trainable_parameters": count_trainable_parameters(run.model),
     }
     if hasattr(run.model, "export_metadata"):

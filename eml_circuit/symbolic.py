@@ -34,6 +34,20 @@ class TreeSearchNode:
             "right": self.right.to_dict(),
         }
 
+    def node_count(self) -> int:
+        if self.kind in {"x0", "x1", "one"}:
+            return 1
+        if self.left is None or self.right is None:
+            raise ValueError("eml node requires left and right children")
+        return 1 + self.left.node_count() + self.right.node_count()
+
+    def tree_depth(self) -> int:
+        if self.kind in {"x0", "x1", "one"}:
+            return 0
+        if self.left is None or self.right is None:
+            raise ValueError("eml node requires left and right children")
+        return 1 + max(self.left.tree_depth(), self.right.tree_depth())
+
 
 @dataclass
 class TreeSearchFitResult:
@@ -182,9 +196,15 @@ class EMLTreeSearchRegressor(nn.Module):
         return (features @ coefficients.unsqueeze(-1) + bias).to(dtype=x.dtype)
 
     def export_metadata(self) -> dict[str, object]:
+        selected_node_counts = [node.node_count() for node in self.selected_nodes]
+        selected_depths = [node.tree_depth() for node in self.selected_nodes]
         return {
             "selected_expressions": list(self.selected_expressions),
             "selected_nodes": [node.to_dict() for node in self.selected_nodes],
+            "selected_expression_count": len(self.selected_nodes),
+            "selected_node_counts": selected_node_counts,
+            "selected_total_nodes": sum(selected_node_counts),
+            "selected_max_depth": max(selected_depths, default=0),
             "max_depth": self.max_depth,
             "beam_width": self.beam_width,
             "max_basis_size": self.max_basis_size,

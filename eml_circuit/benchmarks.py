@@ -19,6 +19,9 @@ class BenchmarkDataset:
     train_targets: torch.Tensor
     extrap_inputs: torch.Tensor
     extrap_targets: torch.Tensor
+    target_mean: float = 0.0
+    target_std: float = 1.0
+    normalized_targets: bool = False
 
 
 @dataclass(frozen=True)
@@ -188,6 +191,7 @@ def make_benchmark_dataset(
     seed: int = 0,
     device: torch.device | str | None = None,
     dtype: torch.dtype = torch.float32,
+    normalize_targets: bool = False,
 ) -> BenchmarkDataset:
     spec = get_benchmark_spec(name)
     device = device or "cpu"
@@ -212,12 +216,24 @@ def make_benchmark_dataset(
         dtype=dtype,
     )
 
+    target_mean = 0.0
+    target_std = 1.0
+    if normalize_targets:
+        target_mean = float(train_targets.mean().item())
+        target_std = float(train_targets.std(unbiased=False).item())
+        target_std = max(target_std, 1e-6)
+        train_targets = (train_targets - target_mean) / target_std
+        extrap_targets = (extrap_targets - target_mean) / target_std
+
     return BenchmarkDataset(
         name=spec.name,
         train_inputs=train_inputs,
         train_targets=train_targets,
         extrap_inputs=extrap_inputs,
         extrap_targets=extrap_targets,
+        target_mean=target_mean,
+        target_std=target_std,
+        normalized_targets=normalize_targets,
     )
 
 

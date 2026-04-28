@@ -24,6 +24,7 @@ from .training import (
     infer_eml_width,
     infer_model_device,
     save_training_checkpoint,
+    should_normalize_targets,
     train_benchmark_regressor,
 )
 
@@ -53,6 +54,7 @@ __all__ = [
     "make_benchmark_dataset",
     "positive_log_branch",
     "save_training_checkpoint",
+    "should_normalize_targets",
     "softsign_clip",
     "stabilized_eml",
     "train_benchmark_regressor",

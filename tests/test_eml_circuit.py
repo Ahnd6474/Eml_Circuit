@@ -17,9 +17,12 @@ from eml_circuit import (
     MLPRegressor,
     RegressionTrainingConfig,
     build_regression_model,
+    count_trainable_parameters,
+    infer_eml_width,
     list_benchmark_groups,
     list_benchmark_names,
     make_benchmark_dataset,
+    should_normalize_targets,
     softsign_clip,
     train_benchmark_regressor,
 )
@@ -64,6 +67,7 @@ class BenchmarkTests(unittest.TestCase):
             n_train=64,
             n_extrap=16,
             seed=1,
+            normalize_targets=True,
         )
         self.assertEqual(dataset.name, "tree_shared_subexpr_a")
         self.assertEqual(dataset.train_inputs.shape, (64, 2))
@@ -71,6 +75,8 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(dataset.extrap_inputs.shape, (16, 2))
         self.assertEqual(dataset.extrap_targets.shape, (16, 1))
         self.assertTrue(torch.isfinite(dataset.train_targets).all())
+        self.assertTrue(dataset.normalized_targets)
+        self.assertAlmostEqual(float(dataset.train_targets.mean()), 0.0, places=4)
 
     def test_mlp_dataset_shapes(self) -> None:
         dataset = make_benchmark_dataset(
@@ -88,6 +94,11 @@ class BenchmarkTests(unittest.TestCase):
 
 
 class TrainingTests(unittest.TestCase):
+    def test_helper_defaults(self) -> None:
+        self.assertEqual(infer_eml_width(16, None), 8)
+        self.assertTrue(should_normalize_targets("tree_shared_subexpr_a", "auto"))
+        self.assertFalse(should_normalize_targets("mlp_gelu_mix_a", "auto"))
+
     def test_build_regression_model_returns_expected_type(self) -> None:
         eml_model = build_regression_model(
             RegressionTrainingConfig(model="emlstack", hidden_dim=16, depth=2, width=16)
@@ -101,6 +112,7 @@ class TrainingTests(unittest.TestCase):
         self.assertIsInstance(eml_model, EMLRegressor)
         self.assertIsInstance(mlp_model, MLPRegressor)
         self.assertIsInstance(tree_model, EMLTreeSearchRegressor)
+        self.assertGreater(count_trainable_parameters(eml_model), 0)
 
     def test_train_benchmark_regressor_runs_small_job(self) -> None:
         run = train_benchmark_regressor(
@@ -117,6 +129,7 @@ class TrainingTests(unittest.TestCase):
                 print_every=10,
                 seed=0,
                 device="cpu",
+                normalize_targets="auto",
             )
         )
         self.assertEqual(run.dataset.train_inputs.shape, (32, 2))
@@ -137,11 +150,14 @@ class TrainingTests(unittest.TestCase):
                 print_every=10,
                 seed=0,
                 device="cpu",
+                normalize_targets="auto",
             )
         )
         self.assertEqual(run.dataset.train_inputs.shape, (32, 2))
         self.assertGreaterEqual(len(run.metrics.history), 1)
         self.assertTrue(torch.isfinite(torch.tensor(run.metrics.train_mse)))
+        metadata = run.model.export_metadata()
+        self.assertGreaterEqual(metadata["selected_expression_count"], 1)
 
 
 if __name__ == "__main__":

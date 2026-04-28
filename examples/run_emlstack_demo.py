@@ -9,6 +9,7 @@ from eml_circuit import (
     infer_model_device,
     list_benchmark_names,
     save_training_checkpoint,
+    should_normalize_targets,
     train_benchmark_regressor,
 )
 
@@ -38,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--print-every", type=int, default=50)
     parser.add_argument("--selection-metric", choices=["train", "extrap"], default="extrap")
+    parser.add_argument("--normalize-targets", choices=["auto", "never", "always"], default="auto")
     parser.add_argument("--tree-max-depth", type=int, default=4)
     parser.add_argument("--tree-beam-width", type=int, default=32)
     parser.add_argument("--tree-max-basis-size", type=int, default=4)
@@ -72,6 +74,7 @@ def main() -> None:
         print_every=args.print_every,
         show_progress=not args.no_progress,
         selection_metric=args.selection_metric,
+        normalize_targets=args.normalize_targets,
         tree_max_depth=args.tree_max_depth,
         tree_beam_width=args.tree_beam_width,
         tree_max_basis_size=args.tree_max_basis_size,
@@ -88,6 +91,10 @@ def main() -> None:
     print(f"benchmark={run.dataset.name}")
     print(f"model={config.model}")
     print(f"device={infer_model_device(run.model)}")
+    print(
+        "normalized_targets="
+        f"{should_normalize_targets(config.benchmark, config.normalize_targets)}"
+    )
     print(f"hidden_dim={config.hidden_dim}")
     print(
         "width="
@@ -99,6 +106,12 @@ def main() -> None:
     if run.metrics.best_epoch is not None:
         print(f"best_epoch={run.metrics.best_epoch}")
         print(f"best_score={run.metrics.best_score:.6f}")
+    model_metadata = getattr(run.model, "export_metadata", None)
+    if model_metadata is not None:
+        metadata = model_metadata()
+        print(f"selected_expression_count={metadata['selected_expression_count']}")
+        print(f"selected_total_nodes={metadata['selected_total_nodes']}")
+        print(f"selected_max_depth={metadata['selected_max_depth']}")
     if args.save_path is not None:
         print(f"checkpoint={args.save_path}")
 
