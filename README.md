@@ -27,6 +27,14 @@ pip install -e .
 - `eml_tree`: EML tree beam-search baseline
 - synthetic benchmark suites for `tree` and `mlp`
 
+현재 기본 실험 크기:
+
+- `hidden_dim=16`
+- `depth=2`
+- `width=None`
+
+`emlstack`에서 `width=None`이면 내부 EML 폭은 `max(4, hidden_dim // 2)`로 자동 결정됩니다.
+
 핵심 모듈:
 
 - [eml_circuit/layers.py](/mnt/d/GitHub/Eml_Circuit/eml_circuit/layers.py)
@@ -108,17 +116,27 @@ python3 examples/run_benchmark_suite.py \
 
 GPU가 여러 개 있으면 가능한 만큼 프로세스를 분리해서 각 작업을 디바이스에 배치합니다. GPU가 2개이고 작업이 여러 개면 2개가 병렬로 돌고, 남은 작업은 슬롯이 비면 이어서 실행합니다.
 
+병렬 실행 시 epoch 로그는 작업별 파일로 분리됩니다.
+
+- `--save-dir`를 주면 로그는 `SAVE_DIR/logs/*.log`
+- `--save-dir`가 없으면 기본 `suite_logs/*.log`
+- 직접 지정하려면 `--log-dir`
+
 ## Useful Options
 
 공통 옵션:
 
 - `--n-train`
 - `--n-extrap`
+- `--hidden-dim`
+- `--depth`
+- `--width`
 - `--epochs`
 - `--batch-size`
 - `--lr`
 - `--device`
 - `--save-path` or `--save-dir`
+- `--log-dir`
 - `--no-progress`
 
 EML tree baseline 전용 옵션:
@@ -159,6 +177,17 @@ python3 examples/run_benchmark_suite.py \
   --devices cuda:0 cuda:1
 ```
 
+더 작은 EMLStack으로 실행:
+
+```bash
+python3 examples/run_emlstack_demo.py \
+  --benchmark tree_deep_chain_b \
+  --model emlstack \
+  --hidden-dim 8 \
+  --depth 2 \
+  --width 4
+```
+
 ## Outputs
 
 단일 실행 스크립트는 다음을 출력합니다.
@@ -166,16 +195,26 @@ python3 examples/run_benchmark_suite.py \
 - `benchmark`
 - `model`
 - `device`
+- `hidden_dim`
+- `width`
+- `trainable_parameters`
 - `train_mse`
 - `extrap_mse`
 - `best_epoch`
 - `best_score`
+
+suite 실행 summary도 동일하게 `hidden_dim`, `width`, `params`를 함께 출력합니다.
+
+병렬 suite 실행 시 추가 출력:
+
+- `log`
 
 체크포인트 저장 시 포함되는 내용:
 
 - `model_state_dict`
 - `config`
 - `metrics`
+- `trainable_parameters`
 - optional `model_metadata` for `eml_tree`
 
 ## Development

@@ -29,9 +29,9 @@ class RegressionTrainingConfig:
     model: str = "emlstack"
     n_train: int = 2048
     n_extrap: int = 512
-    hidden_dim: int = 128
-    depth: int = 4
-    width: int | None = 128
+    hidden_dim: int = 16
+    depth: int = 2
+    width: int | None = None
     output_dim: int = 1
     c: float = 5.0
     eps: float = 1e-4
@@ -62,6 +62,20 @@ class BenchmarkTrainingRun:
     dataset: BenchmarkDataset
     model: torch.nn.Module
     metrics: RegressionMetrics
+
+
+def infer_eml_width(hidden_dim: int, width: int | None) -> int:
+    if hidden_dim <= 0:
+        raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
+    if width is not None:
+        if width <= 0:
+            raise ValueError(f"width must be positive, got {width}")
+        return width
+    return max(4, hidden_dim // 2)
+
+
+def count_trainable_parameters(model: torch.nn.Module) -> int:
+    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
 
 
 def evaluate_regression_mse(
@@ -235,10 +249,11 @@ def fit_regression_model(
 
 def build_regression_model(config: RegressionTrainingConfig) -> torch.nn.Module:
     if config.model == "emlstack":
+        width = infer_eml_width(config.hidden_dim, config.width)
         return EMLRegressor(
             hidden_dim=config.hidden_dim,
             depth=config.depth,
-            width=config.width,
+            width=width,
             output_dim=config.output_dim,
             c=config.c,
             eps=config.eps,
@@ -345,6 +360,11 @@ def save_training_checkpoint(
             "hidden_dim": run.config.hidden_dim,
             "depth": run.config.depth,
             "width": run.config.width,
+            "resolved_width": (
+                infer_eml_width(run.config.hidden_dim, run.config.width)
+                if run.config.model == "emlstack"
+                else run.config.width
+            ),
             "output_dim": run.config.output_dim,
             "c": run.config.c,
             "eps": run.config.eps,
@@ -377,6 +397,7 @@ def save_training_checkpoint(
             "best_score": run.metrics.best_score,
         },
         "dataset_name": run.dataset.name,
+        "trainable_parameters": count_trainable_parameters(run.model),
     }
     if hasattr(run.model, "export_metadata"):
         checkpoint["model_metadata"] = run.model.export_metadata()

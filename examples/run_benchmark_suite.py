@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import replace
@@ -9,7 +10,9 @@ from pathlib import Path
 import torch
 
 from eml_circuit import (
+    count_trainable_parameters,
     RegressionTrainingConfig,
+    infer_eml_width,
     infer_model_device,
     list_benchmark_groups,
     list_benchmark_names,
@@ -35,9 +38,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--devices", nargs="*", default=None)
     parser.add_argument("--n-train", type=int, default=2048)
     parser.add_argument("--n-extrap", type=int, default=512)
-    parser.add_argument("--hidden-dim", type=int, default=128)
-    parser.add_argument("--depth", type=int, default=4)
-    parser.add_argument("--width", type=int, default=128)
+    parser.add_argument("--hidden-dim", type=int, default=16)
+    parser.add_argument("--depth", type=int, default=2)
+    parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--c", type=float, default=5.0)
     parser.add_argument("--eps", type=float, default=1e-4)
     parser.add_argument("--init-scale", type=float, default=1e-3)
@@ -55,6 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tree-min-improvement", type=float, default=1e-6)
     parser.add_argument("--tree-selection-pool-size", type=int, default=128)
     parser.add_argument("--save-dir", default=None)
+    parser.add_argument("--log-dir", default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-progress", action="store_true")
     return parser.parse_args()
@@ -117,6 +121,22 @@ def build_base_config(args: argparse.Namespace) -> RegressionTrainingConfig:
 def _run_single_job(
     config: RegressionTrainingConfig,
     save_path: str | None,
+    log_path: str | None,
+) -> dict[str, object]:
+    if log_path is None:
+        return _execute_job(config, save_path, None)
+
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("w", encoding="utf-8") as handle:
+        with redirect_stdout(handle), redirect_stderr(handle):
+            return _execute_job(config, save_path, str(log_file))
+
+
+def _execute_job(
+    config: RegressionTrainingConfig,
+    save_path: str | None,
+    log_path: str | None,
 ) -> dict[str, object]:
     run = train_benchmark_regressor(config)
     if save_path is not None:
@@ -126,11 +146,19 @@ def _run_single_job(
         "benchmark": run.dataset.name,
         "model": config.model,
         "device": str(infer_model_device(run.model)),
+        "hidden_dim": config.hidden_dim,
+        "width": (
+            infer_eml_width(config.hidden_dim, config.width)
+            if config.model == "emlstack"
+            else None
+        ),
+        "trainable_parameters": count_trainable_parameters(run.model),
         "train_mse": run.metrics.train_mse,
         "extrap_mse": run.metrics.extrap_mse,
         "best_epoch": run.metrics.best_epoch,
         "best_score": run.metrics.best_score,
         "checkpoint": save_path,
+        "log_path": log_path,
     }
     selected_expressions = getattr(run.model, "selected_expressions", None)
     if selected_expressions:
@@ -145,7 +173,13 @@ def main() -> None:
     models = select_models(args)
     base_config = build_base_config(args)
     save_dir = None if args.save_dir is None else Path(args.save_dir)
-    jobs: list[tuple[RegressionTrainingConfig, str | None]] = []
+    total_jobs = len(benchmarks) * len(models)
+    default_log_dir = None
+    if args.log_dir is not None:
+        default_log_dir = Path(args.log_dir)
+    elif total_jobs > 1:
+        default_log_dir = (save_dir / "logs") if save_dir is not None else Path("suite_logs")
+    jobs: list[tuple[RegressionTrainingConfig, str | None, str | None]] = []
 
     for benchmark_index, benchmark_name in enumerate(benchmarks):
         for model_index, model_name in enumerate(models):
@@ -163,7 +197,10 @@ def main() -> None:
             save_path = None
             if save_dir is not None:
                 save_path = str(save_dir / f"{benchmark_name}_{model_name}.pt")
-            jobs.append((config, save_path))
+            log_path = None
+            if default_log_dir is not None:
+                log_path = str(default_log_dir / f"{benchmark_name}_{model_name}.log")
+            jobs.append((config, save_path, log_path))
 
     if len(devices) > 1 and len(jobs) > 1:
         max_workers = min(len(devices), len(jobs))
@@ -173,14 +210,14 @@ def main() -> None:
             mp_context=spawn_context,
         ) as executor:
             futures = [
-                executor.submit(_run_single_job, config, save_path)
-                for config, save_path in jobs
+                executor.submit(_run_single_job, config, save_path, log_path)
+                for config, save_path, log_path in jobs
             ]
             for future in as_completed(futures):
                 print_summary(future.result())
     else:
-        for config, save_path in jobs:
-            print_summary(_run_single_job(config, save_path))
+        for config, save_path, log_path in jobs:
+            print_summary(_run_single_job(config, save_path, log_path))
 
 
 def print_summary(summary: dict[str, object]) -> None:
@@ -190,6 +227,9 @@ def print_summary(summary: dict[str, object]) -> None:
                 f"benchmark={summary['benchmark']}",
                 f"model={summary['model']}",
                 f"device={summary['device']}",
+                f"hidden_dim={summary['hidden_dim']}",
+                f"width={summary['width'] if summary['width'] is not None else 'n/a'}",
+                f"params={summary['trainable_parameters']}",
                 f"train_mse={summary['train_mse']:.6f}",
                 f"extrap_mse={summary['extrap_mse']:.6f}",
             ]
@@ -201,6 +241,8 @@ def print_summary(summary: dict[str, object]) -> None:
         print(f"selected_expressions={summary['selected_expressions']}")
     if summary.get("checkpoint"):
         print(f"checkpoint={summary['checkpoint']}")
+    if summary.get("log_path"):
+        print(f"log={summary['log_path']}")
 
 
 if __name__ == "__main__":

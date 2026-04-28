@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 
 from eml_circuit import (
+    count_trainable_parameters,
     RegressionTrainingConfig,
+    infer_eml_width,
     infer_model_device,
     list_benchmark_names,
     save_training_checkpoint,
@@ -22,9 +24,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", choices=["emlstack", "mlp", "eml_tree"], default="emlstack")
     parser.add_argument("--n-train", type=int, default=2048)
     parser.add_argument("--n-extrap", type=int, default=512)
-    parser.add_argument("--hidden-dim", type=int, default=128)
-    parser.add_argument("--depth", type=int, default=4)
-    parser.add_argument("--width", type=int, default=128)
+    parser.add_argument("--hidden-dim", type=int, default=16)
+    parser.add_argument("--depth", type=int, default=2)
+    parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--c", type=float, default=5.0)
     parser.add_argument("--eps", type=float, default=1e-4)
     parser.add_argument("--init-scale", type=float, default=1e-3)
@@ -86,6 +88,12 @@ def main() -> None:
     print(f"benchmark={run.dataset.name}")
     print(f"model={config.model}")
     print(f"device={infer_model_device(run.model)}")
+    print(f"hidden_dim={config.hidden_dim}")
+    print(
+        "width="
+        f"{infer_eml_width(config.hidden_dim, config.width) if config.model == 'emlstack' else 'n/a'}"
+    )
+    print(f"trainable_parameters={count_trainable_parameters(run.model)}")
     print(f"train_mse={run.metrics.train_mse:.6f}")
     print(f"extrap_mse={run.metrics.extrap_mse:.6f}")
     if run.metrics.best_epoch is not None:

@@ -45,8 +45,8 @@ class EMLRegressor(nn.Module):
     def __init__(
         self,
         input_dim: int = 2,
-        hidden_dim: int = 128,
-        depth: int = 4,
+        hidden_dim: int = 16,
+        depth: int = 2,
         *,
         width: int | None = None,
         output_dim: int = 1,
@@ -78,8 +78,8 @@ class MLPRegressor(nn.Module):
     def __init__(
         self,
         input_dim: int = 2,
-        hidden_dim: int = 128,
-        depth: int = 4,
+        hidden_dim: int = 16,
+        depth: int = 2,
         *,
         output_dim: int = 1,
     ) -> None:
