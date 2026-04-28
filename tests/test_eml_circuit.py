@@ -13,6 +13,7 @@ from eml_circuit import (
     EMLRegressor,
     EMLResidualBlock,
     EMLStack,
+    EMLTreeSearchRegressor,
     MLPRegressor,
     RegressionTrainingConfig,
     build_regression_model,
@@ -67,8 +68,12 @@ class TrainingTests(unittest.TestCase):
         mlp_model = build_regression_model(
             RegressionTrainingConfig(model="mlp", hidden_dim=16, depth=2)
         )
+        tree_model = build_regression_model(
+            RegressionTrainingConfig(model="eml_tree", tree_max_depth=2, tree_beam_width=8)
+        )
         self.assertIsInstance(eml_model, EMLRegressor)
         self.assertIsInstance(mlp_model, MLPRegressor)
+        self.assertIsInstance(tree_model, EMLTreeSearchRegressor)
 
     def test_train_benchmark_regressor_runs_small_job(self) -> None:
         run = train_benchmark_regressor(
@@ -91,6 +96,25 @@ class TrainingTests(unittest.TestCase):
         self.assertEqual(len(run.metrics.history), 2)
         self.assertTrue(torch.isfinite(torch.tensor(run.metrics.train_mse)))
         self.assertTrue(torch.isfinite(torch.tensor(run.metrics.extrap_mse)))
+
+    def test_train_tree_search_regressor_runs_small_job(self) -> None:
+        run = train_benchmark_regressor(
+            RegressionTrainingConfig(
+                benchmark="shared",
+                model="eml_tree",
+                n_train=32,
+                n_extrap=8,
+                tree_max_depth=2,
+                tree_beam_width=8,
+                tree_max_basis_size=2,
+                print_every=10,
+                seed=0,
+                device="cpu",
+            )
+        )
+        self.assertEqual(run.dataset.train_inputs.shape, (32, 2))
+        self.assertGreaterEqual(len(run.metrics.history), 1)
+        self.assertTrue(torch.isfinite(torch.tensor(run.metrics.train_mse)))
 
 
 if __name__ == "__main__":

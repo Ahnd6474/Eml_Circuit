@@ -9,6 +9,8 @@ import torch.nn.functional as F
 
 from .benchmarks import BenchmarkDataset, make_benchmark_dataset
 from .models import EMLRegressor, MLPRegressor
+from .progress import maybe_tqdm
+from .symbolic import EMLTreeSearchRegressor
 
 
 @dataclass
@@ -41,8 +43,14 @@ class RegressionTrainingConfig:
     grad_clip_norm: float | None = 1.0
     eval_every: int = 1
     print_every: int = 50
+    show_progress: bool = True
     restore_best: bool = True
     selection_metric: str = "extrap"
+    tree_max_depth: int = 4
+    tree_beam_width: int = 32
+    tree_max_basis_size: int = 4
+    tree_min_improvement: float = 1e-6
+    tree_selection_pool_size: int = 128
     seed: int = 0
     device: str | torch.device | None = None
     dtype: torch.dtype = torch.float32
@@ -84,6 +92,7 @@ def fit_regression_model(
     grad_clip_norm: float | None = 1.0,
     eval_every: int = 1,
     print_every: int | None = None,
+    show_progress: bool = True,
     restore_best: bool = True,
     selection_metric: str = "extrap",
 ) -> RegressionMetrics:
@@ -113,8 +122,14 @@ def fit_regression_model(
     best_epoch: int | None = None
     best_score: float | None = None
     best_state_dict: dict[str, torch.Tensor] | None = None
+    progress = maybe_tqdm(
+        range(epochs),
+        disable=not show_progress,
+        desc=f"train:{model.__class__.__name__}",
+        leave=False,
+    )
 
-    for epoch in range(epochs):
+    for epoch in progress:
         model.train()
         permutation = torch.randperm(n_samples, device=train_inputs.device)
         epoch_loss = 0.0
@@ -185,10 +200,22 @@ def fit_regression_model(
             )
             if has_extrap:
                 message += f" extrap_mse={extrap_mse_epoch:.6f}"
-            print(message)
+            if hasattr(progress, "write"):
+                progress.write(message)
+            else:
+                print(message)
+
+        if hasattr(progress, "set_postfix"):
+            postfix = {"loss": f"{mean_epoch_loss:.6f}"}
+            if train_mse_epoch == train_mse_epoch:
+                postfix["train_mse"] = f"{train_mse_epoch:.6f}"
+            if has_extrap and extrap_mse_epoch == extrap_mse_epoch:
+                postfix["extrap_mse"] = f"{extrap_mse_epoch:.6f}"
+            progress.set_postfix(postfix)
 
     if restore_best and best_state_dict is not None:
         model.load_state_dict(best_state_dict)
+    progress.close()
 
     train_mse = evaluate_regression_mse(model, train_inputs, train_targets)
     if not has_extrap:
@@ -223,6 +250,14 @@ def build_regression_model(config: RegressionTrainingConfig) -> torch.nn.Module:
             depth=config.depth,
             output_dim=config.output_dim,
         )
+    if config.model == "eml_tree":
+        return EMLTreeSearchRegressor(
+            max_depth=config.tree_max_depth,
+            beam_width=config.tree_beam_width,
+            max_basis_size=config.tree_max_basis_size,
+            min_improvement=config.tree_min_improvement,
+            selection_pool_size=config.tree_selection_pool_size,
+        )
     raise ValueError(f"Unknown model type: {config.model}")
 
 
@@ -241,22 +276,41 @@ def train_benchmark_regressor(
         dtype=config.dtype,
     )
     model = build_regression_model(config).to(device=device, dtype=config.dtype)
-    metrics = fit_regression_model(
-        model,
-        dataset.train_inputs,
-        dataset.train_targets,
-        extrap_inputs=dataset.extrap_inputs,
-        extrap_targets=dataset.extrap_targets,
-        epochs=config.epochs,
-        batch_size=config.batch_size,
-        lr=config.lr,
-        weight_decay=config.weight_decay,
-        grad_clip_norm=config.grad_clip_norm,
-        eval_every=config.eval_every,
-        print_every=config.print_every,
-        restore_best=config.restore_best,
-        selection_metric=config.selection_metric,
-    )
+    if isinstance(model, EMLTreeSearchRegressor):
+        symbolic_result = model.fit(
+            dataset.train_inputs,
+            dataset.train_targets,
+            extrap_inputs=dataset.extrap_inputs,
+            extrap_targets=dataset.extrap_targets,
+            show_progress=config.show_progress,
+            progress_desc=f"tree:{config.benchmark}",
+        )
+        metrics = RegressionMetrics(
+            train_mse=symbolic_result.train_mse,
+            extrap_mse=symbolic_result.extrap_mse,
+            history=symbolic_result.history,
+            extrap_history=symbolic_result.extrap_history,
+            best_epoch=symbolic_result.best_depth,
+            best_score=symbolic_result.train_mse,
+        )
+    else:
+        metrics = fit_regression_model(
+            model,
+            dataset.train_inputs,
+            dataset.train_targets,
+            extrap_inputs=dataset.extrap_inputs,
+            extrap_targets=dataset.extrap_targets,
+            epochs=config.epochs,
+            batch_size=config.batch_size,
+            lr=config.lr,
+            weight_decay=config.weight_decay,
+            grad_clip_norm=config.grad_clip_norm,
+            eval_every=config.eval_every,
+            print_every=config.print_every,
+            show_progress=config.show_progress,
+            restore_best=config.restore_best,
+            selection_metric=config.selection_metric,
+        )
     return BenchmarkTrainingRun(
         config=config,
         dataset=dataset,
@@ -265,10 +319,22 @@ def train_benchmark_regressor(
     )
 
 
+def infer_model_device(model: torch.nn.Module) -> torch.device:
+    for parameter in model.parameters():
+        return parameter.device
+    for buffer in model.buffers():
+        return buffer.device
+    return torch.device("cpu")
+
+
 def save_training_checkpoint(
     path: str | Path,
     run: BenchmarkTrainingRun,
 ) -> None:
+    path = Path(path)
+    if path.parent != Path("."):
+        path.parent.mkdir(parents=True, exist_ok=True)
+
     checkpoint = {
         "model_state_dict": run.model.state_dict(),
         "config": {
@@ -290,10 +356,16 @@ def save_training_checkpoint(
             "grad_clip_norm": run.config.grad_clip_norm,
             "eval_every": run.config.eval_every,
             "print_every": run.config.print_every,
+            "show_progress": run.config.show_progress,
             "restore_best": run.config.restore_best,
             "selection_metric": run.config.selection_metric,
+            "tree_max_depth": run.config.tree_max_depth,
+            "tree_beam_width": run.config.tree_beam_width,
+            "tree_max_basis_size": run.config.tree_max_basis_size,
+            "tree_min_improvement": run.config.tree_min_improvement,
+            "tree_selection_pool_size": run.config.tree_selection_pool_size,
             "seed": run.config.seed,
-            "device": str(run.config.device),
+            "device": str(infer_model_device(run.model)),
             "dtype": str(run.config.dtype),
         },
         "metrics": {
@@ -306,4 +378,6 @@ def save_training_checkpoint(
         },
         "dataset_name": run.dataset.name,
     }
-    torch.save(checkpoint, Path(path))
+    if hasattr(run.model, "export_metadata"):
+        checkpoint["model_metadata"] = run.model.export_metadata()
+    torch.save(checkpoint, path)

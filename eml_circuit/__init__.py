@@ -4,6 +4,7 @@ from .benchmarks import BenchmarkDataset, make_benchmark_dataset
 from .functional import eml, positive_log_branch, softsign_clip, stabilized_eml
 from .layers import EMLResidualBlock, RMSNorm
 from .models import EMLRegressor, EMLStack, MLPRegressor
+from .symbolic import EMLTreeSearchRegressor
 from .training import (
     BenchmarkTrainingRun,
     RegressionMetrics,
@@ -11,6 +12,7 @@ from .training import (
     build_regression_model,
     evaluate_regression_mse,
     fit_regression_model,
+    infer_model_device,
     save_training_checkpoint,
     train_benchmark_regressor,
 )
@@ -20,6 +22,7 @@ __all__ = [
     "EMLResidualBlock",
     "EMLRegressor",
     "EMLStack",
+    "EMLTreeSearchRegressor",
     "MLPRegressor",
     "RMSNorm",
     "BenchmarkTrainingRun",
@@ -29,6 +32,7 @@ __all__ = [
     "eml",
     "evaluate_regression_mse",
     "fit_regression_model",
+    "infer_model_device",
     "make_benchmark_dataset",
     "positive_log_branch",
     "save_training_checkpoint",
