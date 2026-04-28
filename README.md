@@ -1,103 +1,129 @@
 # EMLStack: Residual EML Circuit Layer
 
-## 1. 출발점
+> EMLStack은 EML을 단순 activation으로 사용하는 방식이 아니라, EML node를 직접 쌓아 neural circuit layer로 구성하는 아이디어이다.
 
-EML 논문의 기본 연산자는
+## 1. 배경
 
-$\mathop{\text{eml}}(x,y)=\exp(x)-\ln(y)$
-입니다.
+EML 논문의 기본 연산자는 다음과 같다.
 
-논문은 이 단일 이항 연산자와 상수 (1)만으로 exp, log, 사칙연산, 거듭제곱, 삼각함수 등 표준 elementary function을 구성할 수 있다고 주장합니다. 또한 모든 EML 표현은 동일한 binary node로 이루어진 tree가 되며, 문법은 ($S\to1\mid\mathop{ext{eml}}(S,S)$)처럼 단순해집니다. ([arXiv][1])
+$$
+\mathrm{eml}(x,y)=\exp(x)-\ln(y)
+$$
 
-이걸 딥러닝으로 옮길 때 중요한 점은:
+원 논문의 핵심 주장은 단일 이항 연산자 `eml`과 상수 `1`만으로 여러 elementary function을 구성할 수 있다는 것이다.
 
-```math
-\text{Linear} \rightarrow \text{Activation}
-```
+EML 표현은 동일한 binary node로 이루어진 tree로 볼 수 있다.
 
-구조가 아니라,
+$$
+S \rightarrow 1 \mid \mathrm{eml}(S,S)
+$$
 
-```math
-\text{Linear} \rightarrow (u,v) \rightarrow \mathop{	ext{eml}}(u,v)
-```
+이 관점에서 EML은 일반적인 activation이라기보다, elementary function을 구성하는 **computation primitive**에 가깝다.
 
-구조로 가야 한다는 것입니다.
-
-즉 선형층은 feature를 직접 만드는 게 아니라, **EML node에 들어갈 ordered pair**를 생성합니다.
+- Paper: [arXiv:2603.21852v2](https://arxiv.org/pdf/2603.21852v2)
 
 ---
 
-## 2. 기본 블록
+## 2. 핵심 아이디어
 
-입력 hidden state를 (H_l)라고 하면, 한 EMLStack block은 다음처럼 정의합니다.
+기존 MLP는 보통 다음 구조를 따른다.
 
-```math
-Z_l = \mathop{/text{RMSNorm}}(H_l)
+$$
+H_{l+1} = \sigma(W H_l + b)
+$$
 
+즉, 선형층이 feature를 만들고 activation이 비선형성을 제공한다.
 
+하지만 EML은 그 자체가 이미 강한 비선형 연산이다.
 
+$$
+\mathrm{eml}(u,v)=\exp(u)-\ln(v)
+$$
+
+따라서 EML을 사용할 때는 다음처럼 보는 것이 더 자연스럽다.
+
+$$
+H_l
+\rightarrow
+\mathrm{Linear}_{2m}(H_l)
+\rightarrow
+(U,V)
+\rightarrow
+\mathrm{EML}(U,V)
+$$
+
+즉, 선형층은 hidden feature를 직접 생성하는 것이 아니라, EML node에 입력될 ordered pair를 생성한다.
+
+$$
+[U,V] = W_p H_l + b
+$$
+
+$$
+E = \mathrm{eml}(U,V)
+$$
+
+여기서 $(U,V)$는 순서쌍이다.  
+EML은 일반적으로 비가환적이므로 `U`와 `V`의 역할을 구분해야 한다.
+
+---
+
+## 3. EMLStack Block
+
+실제 학습에서는 순정 EML을 그대로 쓰기 어렵다.
+
+문제는 두 가지다.
+
+1. `exp(U)` branch는 쉽게 폭주한다.
+2. `ln(V)` branch는 $V > 0$ 조건이 필요하다.
+
+따라서 EMLStack block에서는 다음 안정화가 필요하다.
+
+- RMSNorm
+- softsign clamp
+- positive transform for log branch
+- small residual scale
+- residual connection
+
+전체 구조는 다음과 같다.
+
+$$
+Z_l = \mathrm{RMSNorm}(H_l)
+$$
+
+$$
 [U_l,V_l] = W_p Z_l + b
-```
+$$
 
-여기서 (W_p)는 출력 차원이 (2m)인 선형층입니다.
-그 결과를 두 채널로 나눕니다.
+$$
+U_{\mathrm{safe}} =
+\frac{U_l}{1 + |U_l| / c}
+$$
 
-```math
-U_l,V_l\in\mathbb{R}^{m}
-```
+$$
+V_{\mathrm{pos}} =
+\mathrm{softplus}(V_l) + \epsilon
+$$
 
-그리고 각 순서쌍 ((U_j,V_j))를 EML에 넣습니다.
+$$
+E_l =
+\exp(U_{\mathrm{safe}})
+-
+\ln(V_{\mathrm{pos}})
+$$
 
-```math
-E_l
-===
-
-\mathop{	ext{eml}}(U_l,V_l)
-```
-
-다만 순정 EML은 수치적으로 위험하므로 안정화된 형태를 씁니다.
-
-```math
-U_{\text{safe}}
-===============
-
-\frac{U_l}{1+|U_l|/c}
-
-
-
-V_{\text{pos}}
-==============
-
-\mathop{\text{softplus}}(V_l)+\epsilon
-
-
-
-E_l
-===
-```
-## \exp(U_{\text{safe}})
-```math
-\ln(V_{\text{pos}})
-```
-
-최종적으로 residual을 붙입니다.
-
-```math
+$$
 H_{l+1}
-=======
-
+=
 H_l
 +
 \lambda_l W_o E_l
-```
+$$
 
-전체 블록은:
+전체 block을 하나의 식으로 쓰면 다음과 같다.
 
-```math
-\boxed{
+$$
 H_{l+1}
-=======
-
+=
 H_l
 +
 \lambda_l W_o
@@ -105,249 +131,187 @@ H_l
 \exp\left(
 \frac{U_l}{1+|U_l|/c}
 \right)
--------
-
+-
 \ln\left(
-\operatorname{softplus}(V_l)+\epsilon
+\mathrm{softplus}(V_l)+\epsilon
 \right)
 \right]
-}
+$$
 
+where
 
+$$
+[U_l,V_l]=W_p\mathrm{RMSNorm}(H_l)+b
+$$
 
-[U_l,V_l]=W_p\operatorname{RMSNorm}(H_l)+b
+---
+
+## 4. 구조 다이어그램
+
+```mermaid
+flowchart LR
+    H[Input H_l] --> N[RMSNorm]
+    N --> P[Linear Projection]
+    P --> U[U channel]
+    P --> V[V channel]
+
+    U --> C[Softsign Clamp]
+    V --> S[Softplus + eps]
+
+    C --> EXP[exp]
+    S --> LOG[log]
+
+    EXP --> SUB[exp U_safe - log V_pos]
+    LOG --> SUB
+
+    SUB --> O[Output Projection W_o]
+    O --> SCALE[Residual Scale lambda]
+    H --> ADD[Residual Add]
+    SCALE --> ADD
+
+    ADD --> HNEXT[H_l_plus_1]
 ```
 
 ---
 
-## 3. 왜 activation이 필요 없는가
+## 5. 왜 activation을 쓰지 않는가
 
-EML 자체가 이미 강한 비선형 연산입니다.
+EMLStack에서는 ReLU, GELU, SiLU 같은 pointwise activation이 필요하지 않다.
 
-```math
-\mathop{	ext{eml}}(u,v)=e^u-\ln v
-```
+기존 구조는 다음과 같다.
 
-여기에는 exponential branch와 logarithmic branch가 모두 들어 있습니다.
-따라서 ReLU, GELU, SiLU 같은 pointwise activation을 추가하면 구조가 중복됩니다.
+$$
+\mathrm{Linear} \rightarrow \mathrm{Activation}
+$$
 
-이 구조에서 비선형성은 activation이 아니라 **EML node primitive**에서 발생합니다.
+EMLStack에서는 다음 구조를 사용한다.
 
-정리하면:
+$$
+\mathrm{Linear}_{2m} \rightarrow (U,V) \rightarrow \mathrm{EML}(U,V)
+$$
 
-| 기존 MLP                    | EMLStack                   |
-| ------------------------- | -------------------------- |
-| Linear가 hidden feature 생성 | Linear가 ((u,v)) pair 생성    |
-| Activation이 비선형성 제공       | EML이 비선형성 제공               |
-| feature는 dense vector     | feature는 EML circuit state |
-| 해석성 낮음                    | 중간 EML node를 수식 후보로 해석 가능  |
+EML 자체가 exponential branch와 logarithmic branch를 갖기 때문에, 별도의 activation을 추가하면 비선형성이 중복된다.
 
----
-
-## 4. 왜 residual이 중요한가
-
-residual은 선택사항이 아니라 거의 필수입니다.
-
-순수하게
-
-$H_{l+1}=\operatorname{EMLBlock}(H_l)$
-
-로 두면 매 layer가 representation 전체를 덮어씁니다. EML은 (e^u) 때문에 쉽게 폭주하고, (-\ln v) 때문에 (v\to0) 근방에서 불안정해집니다.
-
-논문에서도 EML net 학습 중 다중 합성된 exponential로 인한 overflow와 NaN 문제가 발생했고, exp argument/value clamping이 필요했다고 보고합니다. 또 random initialization에서 exact recovery 성공률이 depth 2에서는 100%, depth 3–4에서는 약 25%, depth 5에서는 1% 미만, depth 6에서는 448회 중 성공 0이었다고 합니다. 즉 깊은 EML tree 탐색은 구조적으로 어렵습니다. ([arXiv][1])
-
-residual을 쓰면 EML block은 전체 표현을 갈아엎는 것이 아니라,
-
-$H_{l+1}=H_l+\lambda_l\Delta H_l$
-
-처럼 작은 correction을 추가합니다.
-
-이게 중요한 이유는:
-
-1. identity path가 살아 있어 학습이 덜 터짐
-2. gradient highway가 생김
-3. EML node가 feature constructor로 작동함
-4. hardening/snap 과정에서 성능 붕괴가 줄어듦
-5. EML tree가 아니라 EML circuit/DAG처럼 중간 feature를 누적 가능
+| 기존 MLP | EMLStack |
+|---|---|
+| Linear가 hidden feature 생성 | Linear가 EML 입력 pair 생성 |
+| Activation이 비선형성 제공 | EML node가 비선형성 제공 |
+| pointwise activation 사용 | binary operation 사용 |
+| feature vector 중심 | circuit state 중심 |
+| 해석성 낮음 | 중간 EML node를 수식 후보로 해석 가능 |
 
 ---
 
-## 5. softsign clamp를 쓰는 이유
+## 6. 왜 residual이 중요한가
 
-exp branch는 반드시 제어해야 합니다.
+EMLStack에서 residual은 선택사항이 아니다. 거의 필수다.
 
-처음에는
+순수하게 다음처럼 구성하면 불안정하다.
 
-$U_{\text{safe}}=c\tanh(U/c)$
+$$
+H_{l+1}=\mathrm{EMLBlock}(H_l)
+$$
 
-를 생각할 수 있지만, `tanh`는 포화가 너무 빠릅니다. 대신 softsign clamp가 더 낫습니다.
+이 경우 각 layer가 전체 representation을 덮어쓴다.  
+EML은 `exp`와 `log` 때문에 scale 변화가 매우 크므로, 깊게 쌓으면 학습이 쉽게 터질 수 있다.
 
-```math
-U_{\text{safe}}
-===============
+따라서 다음 형태가 더 적절하다.
 
+$$
+H_{l+1}=H_l+\lambda_l\Delta H_l
+$$
+
+여기서 EML block은 전체 표현을 새로 만드는 것이 아니라, 기존 표현에 작은 symbolic correction을 추가한다.
+
+residual이 중요한 이유는 다음과 같다.
+
+1. identity path가 살아 있어 학습이 안정된다.
+2. gradient highway가 생긴다.
+3. EML node가 feature constructor처럼 작동한다.
+4. hardening 또는 snap 과정에서 성능 붕괴가 줄어든다.
+5. tree가 아니라 reusable circuit 또는 DAG 구조에 가까워진다.
+
+---
+
+## 7. Softsign Clamp
+
+`exp(U)` branch는 반드시 제어해야 한다.
+
+가장 단순한 방법은 hard clamp다.
+
+$$
+U_{\mathrm{safe}}=\mathrm{clip}(U,-c,c)
+$$
+
+하지만 hard clamp는 경계에서 gradient가 끊긴다.
+
+또 다른 방법은 `tanh` clamp다.
+
+$$
+U_{\mathrm{safe}}=c\mathrm{tanh}(U/c)
+$$
+
+하지만 `tanh`는 포화가 빠르다.
+
+따라서 EMLStack에서는 softsign clamp가 더 적절하다.
+
+$$
+U_{\mathrm{safe}}
+=
 \frac{U}{1+|U|/c}
-```
+$$
 
-이 방식은 ($U_{\text{safe}}\in(-c,c)$)로 exp 입력을 제한하면서도, gradient가 `tanh`보다 천천히 죽습니다.
+이 방식은 $U_{\mathrm{safe}}\in(-c,c)$를 보장하면서도, `tanh`보다 gradient가 천천히 감소한다.
 
-| 방식             | 장점         | 단점                     |
-| -------------- | ---------- | ---------------------- |
-| no clamp       | 표현력 최대     | exp 폭주                 |
-| hard clamp     | 폭주 방지      | 경계에서 gradient 끊김       |
-| tanh clamp     | 부드러움       | 포화 빠름                  |
-| softsign clamp | 부드럽고 포화 느림 | 여전히 큰 입력에서 gradient 감소 |
+| 방식 | 장점 | 단점 |
+|---|---|---|
+| no clamp | 표현력 최대 | exp 폭주 |
+| hard clamp | 폭주 방지 | 경계에서 gradient 단절 |
+| tanh clamp | 부드러운 제한 | 포화가 빠름 |
+| softsign clamp | 부드럽고 포화가 느림 | 큰 입력에서 gradient 감소 |
 
-초기값은 보수적으로:
+초기값은 다음 정도가 적절하다.
 
-$c=3\sim5$
-
-정도가 적절합니다.
-
----
-
-## 6. 연구 기여 포인트
-
-단순히 “EML을 neural layer로 만들었다”만으로는 약합니다.
-기여가 되려면 기존 EML tree search가 어려운 함수군을 명확히 보여야 합니다.
-
-가장 강한 포인트는:
-
-[
-\boxed{
-\text{tree search} \rightarrow \text{circuit learning}
-}
-]
-
-입니다.
-
-기존 EML tree는 중간식을 재사용하지 못합니다. 같은 subexpression이 여러 번 필요하면 tree 안에서 계속 복사해야 합니다.
-
-반면 EMLStack은 channel에 중간 feature를 저장하고, 다음 layer에서 재사용할 수 있습니다. 즉 tree가 아니라 DAG/circuit에 가깝습니다.
-
-따라서 핵심 claim은 다음과 같습니다.
-
-> EMLStack converts EML symbolic regression from deep tree search into residual circuit learning with reusable intermediate features.
-
-또는 더 짧게:
-
-> EMLStack learns tree-hard but circuit-easy elementary functions.
+$$
+c = 3 \sim 5
+$$
 
 ---
 
-## 7. 만들어야 할 benchmark
+## 8. Log Branch 안정화
 
-기여를 보이려면 다음 함수군이 필요합니다.
+순정 EML은 다음 항을 포함한다.
 
-### A. Shared subexpression family
+$$
+-\ln(V)
+$$
 
-중간식을 하나 정의합니다.
+하지만 선형층 출력 $V$는 음수가 될 수 있다.  
+따라서 실수 영역에서 안정적으로 계산하려면 $V>0$을 보장해야 한다.
 
-$g(x,y)=\mathop{	ext{eml}}(x,y)$
+이를 위해 다음 변환을 사용한다.
 
-그다음 이 (g)를 여러 번 재사용하는 함수를 만듭니다.
+$$
+V_{\mathrm{pos}}=\mathrm{softplus}(V)+\epsilon
+$$
 
-```math
-f_k(x,y)
-========
+그리고 EML branch는 다음처럼 계산한다.
 
-\sum_{i=1}^{k}
-a_i
-\left[
-\exp(\alpha_i g(x,y))
----------------------
+$$
+E=\exp(U_{\mathrm{safe}})-\ln(V_{\mathrm{pos}})
+$$
 
-\ln(\beta_i+\gamma_i g(x,y)^2)
-\right]
-```
+여기서 $\epsilon$은 작은 양수다.
 
-여기서 기존 tree는 (g(x,y))를 여러 branch에 반복 복사해야 합니다.
-EMLStack은 첫 layer에서 (g)를 만들고, 다음 layer에서 재사용할 수 있습니다.
+예시:
 
-이게 가장 강한 benchmark입니다.
-
-### B. Deep EML chain
-
-```math
-g_0(x,y)=x
-
-
-
-g_{t+1}(x,y)
-============
-
-\mathop{	ext{eml}}(s(g_t),y)
-
-
-
-s(z)=\frac{z}{1+|z|/c}
-
-
-
-f_L(x,y)=g_L(x,y)
-```
-
-이건 기존 EML tree의 depth 한계를 직접 찌르는 benchmark입니다.
-다만 모델 구조와 target generator가 너무 비슷해 보일 수 있으므로 보조 실험으로 두는 편이 낫습니다.
-
-### C. Low-depth circuit, high-size tree
-
-예를 들어:
-
-[
-z_1=\mathop{	ext{eml}}(x,y)
-]
-
-[
-z_2=\mathop{	ext{eml}}(z_1,1)
-]
-
-[
-z_3=\mathop{	ext{eml}}(1,z_1)
-]
-
-[
-z_4=\mathop{	ext{eml}}(z_2,z_3)
-]
-
-[
-f(x,y)=w_1z_1+w_2z_2+w_3z_3+w_4z_4
-]
-
-EMLStack에서는 (z_1,z_2,z_3,z_4)가 channel로 남습니다.
-하지만 pure tree는 중간식을 재사용하지 못해서 expression size가 커집니다.
+$$
+\epsilon=10^{-4}
+$$
 
 ---
 
-## 8. 평가 지표
-
-train MSE만 보면 안 됩니다. MLP도 근사는 잘합니다.
-
-핵심 지표는 다음입니다.
-
-| 지표                  | 의미                          |
-| ------------------- | --------------------------- |
-| interpolation MSE   | 학습 범위 안에서 맞는가               |
-| extrapolation MSE   | 범위 밖에서도 맞는가                 |
-| snap 후 MSE          | symbolic hardening 이후 유지되는가 |
-| recovery rate       | seed별 성공률                   |
-| NaN/overflow rate   | 수치적으로 안정적인가                 |
-| effective tree size | 같은 함수를 tree로 표현할 때 얼마나 커지는가 |
-| circuit depth/width | EMLStack에서 얼마나 작게 표현되는가     |
-
-가장 중요한 것은:
-
-[
-\boxed{
-\text{snap 후 extrapolation MSE}
-}
-]
-
-입니다.
-
----
-
-## 9. PyTorch 기본형
+## 9. PyTorch 구현
 
 ```python
 import torch
@@ -356,30 +320,31 @@ import torch.nn.functional as F
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-8):
+    def __init__(self, dim: int, eps: float = 1e-8):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(dim))
         self.eps = eps
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         rms = x.pow(2).mean(dim=-1, keepdim=True).add(self.eps).sqrt()
         return self.weight * x / rms
 
 
-def softsign_clip(x, c):
+def softsign_clip(x: torch.Tensor, c: float) -> torch.Tensor:
     return x / (1.0 + x.abs() / c)
 
 
 class EMLResidualBlock(nn.Module):
     def __init__(
         self,
-        dim,
-        width=None,
-        c=5.0,
-        eps=1e-4,
-        init_scale=1e-3,
+        dim: int,
+        width: int | None = None,
+        c: float = 5.0,
+        eps: float = 1e-4,
+        init_scale: float = 1e-3,
     ):
         super().__init__()
+
         width = width or dim
 
         self.norm = RMSNorm(dim)
@@ -390,7 +355,7 @@ class EMLResidualBlock(nn.Module):
         self.eps = eps
         self.res_scale = nn.Parameter(torch.tensor(init_scale))
 
-    def forward(self, h):
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
         z = self.norm(h)
 
         pair = self.pair_proj(z)
@@ -406,39 +371,249 @@ class EMLResidualBlock(nn.Module):
 
 ---
 
-## 10. 한 줄 정리
+## 10. EMLStack Model 예시
 
-이 아이디어의 정확한 포지션은 이것입니다.
+```python
+class EMLStack(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        depth: int,
+        width: int | None = None,
+        c: float = 5.0,
+        eps: float = 1e-4,
+        init_scale: float = 1e-3,
+    ):
+        super().__init__()
 
-[
-\boxed{
-\text{EMLStack은 activation replacement가 아니라, trainable elementary-function circuit layer다.}
-}
-]
+        self.blocks = nn.ModuleList([
+            EMLResidualBlock(
+                dim=dim,
+                width=width,
+                c=c,
+                eps=eps,
+                init_scale=init_scale,
+            )
+            for _ in range(depth)
+        ])
 
-핵심 설계는:
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
+        for block in self.blocks:
+            h = block(h)
+        return h
+```
 
-[
-\boxed{
-\text{RMSNorm}
+---
+
+## 11. 연구 기여 포인트
+
+단순히 “EML을 neural layer로 만들었다”는 것만으로는 약하다.
+
+유의미한 기여가 되려면 기존 EML tree search가 어려운 함수군에서 EMLStack이 더 잘 작동한다는 것을 보여야 한다.
+
+핵심 차이는 다음이다.
+
+$$
+\mathrm{tree\ search}
 \rightarrow
-\text{Linear}_{2m}
+\mathrm{circuit\ learning}
+$$
+
+기존 EML tree는 중간식을 재사용하지 못한다.  
+같은 subexpression이 여러 번 필요하면 tree 내부에 계속 복사해야 한다.
+
+반면 EMLStack은 중간 feature를 channel에 저장하고 다음 layer에서 재사용할 수 있다.  
+즉 EMLStack은 tree가 아니라 DAG 또는 circuit에 가깝다.
+
+핵심 claim은 다음과 같다.
+
+> EMLStack converts EML symbolic regression from deep tree search into residual circuit learning with reusable intermediate features.
+
+또는:
+
+> EMLStack learns tree-hard but circuit-easy elementary functions.
+
+---
+
+## 12. Benchmark 설계
+
+### 12.1 Shared Subexpression Family
+
+가장 중요한 benchmark는 shared subexpression이 많은 함수군이다.
+
+먼저 중간식을 정의한다.
+
+$$
+g(x,y)=\mathrm{eml}(x,y)
+$$
+
+그리고 이 $g$를 여러 번 재사용하는 target function을 만든다.
+
+$$
+f_k(x,y)
+=
+\sum_{i=1}^{k}
+a_i
+\left[
+\exp(\alpha_i g(x,y))
+-
+\ln(\beta_i+\gamma_i g(x,y)^2)
+\right]
+$$
+
+여기서 기존 tree는 $g(x,y)$를 여러 branch에 반복 복사해야 한다.
+
+반면 EMLStack은 다음처럼 처리할 수 있다.
+
+1. 첫 layer에서 $g(x,y)$ 생성
+2. 다음 layer에서 $g$ channel 재사용
+3. 여러 EML branch 병렬 계산
+4. output projection으로 합성
+
+이 benchmark는 EMLStack의 circuit-like 구조를 가장 잘 보여준다.
+
+---
+
+### 12.2 Deep EML Chain
+
+깊은 EML tree 탐색 한계를 직접 찌르는 benchmark다.
+
+$$
+g_0(x,y)=x
+$$
+
+$$
+g_{t+1}(x,y)
+=
+\mathrm{eml}(s(g_t),y)
+$$
+
+where
+
+$$
+s(z)=\frac{z}{1+|z|/c}
+$$
+
+최종 target은 다음과 같다.
+
+$$
+f_L(x,y)=g_L(x,y)
+$$
+
+이 함수군은 depth가 커질수록 기존 EML tree search가 어려워진다.
+
+다만 이 benchmark는 target generator가 EMLStack 구조와 너무 가까워 보일 수 있으므로, 주 실험보다는 보조 실험으로 두는 것이 좋다.
+
+---
+
+### 12.3 Low-Depth Circuit, High-Size Tree
+
+중간식을 여러 번 재사용하는 circuit target을 구성한다.
+
+$$
+z_1=\mathrm{eml}(x,y)
+$$
+
+$$
+z_2=\mathrm{eml}(z_1,1)
+$$
+
+$$
+z_3=\mathrm{eml}(1,z_1)
+$$
+
+$$
+z_4=\mathrm{eml}(z_2,z_3)
+$$
+
+$$
+f(x,y)=w_1z_1+w_2z_2+w_3z_3+w_4z_4
+$$
+
+EMLStack에서는 $z_1,z_2,z_3,z_4$가 channel로 남아 재사용될 수 있다.
+
+하지만 pure EML tree에서는 중간식을 재사용하지 못하므로 expression size가 커진다.
+
+---
+
+## 13. 평가 지표
+
+train MSE만 보면 안 된다.  
+일반 MLP도 interpolation은 잘할 수 있다.
+
+중요한 지표는 다음이다.
+
+| Metric | Description |
+|---|---|
+| interpolation MSE | 학습 범위 안에서의 오차 |
+| extrapolation MSE | 학습 범위 밖에서의 오차 |
+| snap 후 MSE | symbolic hardening 이후 오차 |
+| recovery rate | seed별 성공률 |
+| NaN/overflow rate | 수치 안정성 |
+| effective tree size | 같은 함수를 tree로 표현할 때 필요한 크기 |
+| circuit depth/width | EMLStack에서 필요한 depth와 width |
+
+가장 중요한 지표는 다음이다.
+
+$$
+\mathrm{snap\ after\ extrapolation\ MSE}
+$$
+
+또는 더 명확히:
+
+$$
+\mathrm{extrapolation\ MSE\ after\ snap}
+$$
+
+---
+
+## 14. Baseline
+
+비교 대상은 다음이 적절하다.
+
+| Baseline | Purpose |
+|---|---|
+| MLP + GELU | 일반 neural approximation baseline |
+| KAN | function-learning baseline |
+| PySR | symbolic regression baseline |
+| 원 논문식 EML tree | 직접적인 EML baseline |
+| EMLStack | 제안 모델 |
+
+---
+
+## 15. 요약
+
+EMLStack의 핵심은 다음과 같다.
+
+$$
+\mathrm{EMLStack\ is\ not\ an\ activation\ replacement.}
+$$
+
+$$
+\mathrm{EMLStack\ is\ a\ trainable\ elementary\ function\ circuit\ layer.}
+$$
+
+구조는 다음과 같다.
+
+$$
+\mathrm{RMSNorm}
+\rightarrow
+\mathrm{Linear}_{2m}
 \rightarrow
 (U,V)
 \rightarrow
-\text{softsign-stabilized EML}
+\mathrm{softsign\ stabilized\ EML}
 \rightarrow
-\text{small residual update}
-}
-]
+\mathrm{small\ residual\ update}
+$$
 
-핵심 기여는:
+기여 포인트는 다음이다.
 
-[
-\boxed{
-\text{기존 EML tree search가 어려운 subexpression-sharing 함수를 EML circuit으로 학습한다.}
-}
-]
+$$
+\mathrm{tree\ hard}
+\rightarrow
+\mathrm{circuit\ easy}
+$$
 
-
-[1]: https://arxiv.org/pdf/2603.21852v2 "All elementary functions from a single binary operator"
+즉, EMLStack의 목적은 GELU나 ReLU를 대체하는 것이 아니다.  
+목적은 EML 기반 symbolic regression을 deep tree search에서 residual circuit learning으로 바꾸는 것이다.
