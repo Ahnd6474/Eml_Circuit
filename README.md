@@ -4,9 +4,9 @@
 
 EML 논문의 기본 연산자는
 
-$$
+```math
 \operatorname{eml}(x,y)=\exp(x)-\ln(y)
-$$
+```
 입니다.
 
 논문은 이 단일 이항 연산자와 상수 (1)만으로 exp, log, 사칙연산, 거듭제곱, 삼각함수 등 표준 elementary function을 구성할 수 있다고 주장합니다. 또한 모든 EML 표현은 동일한 binary node로 이루어진 tree가 되며, 문법은 (S\to1\mid\operatorname{eml}(S,S))처럼 단순해집니다. ([arXiv][1])
