@@ -7,7 +7,7 @@ EML 논문의 기본 연산자는
 $\mathop{\text{eml}}(x,y)=\exp(x)-\ln(y)$
 입니다.
 
-논문은 이 단일 이항 연산자와 상수 (1)만으로 exp, log, 사칙연산, 거듭제곱, 삼각함수 등 표준 elementary function을 구성할 수 있다고 주장합니다. 또한 모든 EML 표현은 동일한 binary node로 이루어진 tree가 되며, 문법은 (S\to1\mid\operatorname{eml}(S,S))처럼 단순해집니다. ([arXiv][1])
+논문은 이 단일 이항 연산자와 상수 (1)만으로 exp, log, 사칙연산, 거듭제곱, 삼각함수 등 표준 elementary function을 구성할 수 있다고 주장합니다. 또한 모든 EML 표현은 동일한 binary node로 이루어진 tree가 되며, 문법은 ($S\to1\mid\mathop{ext{eml}}(S,S)$)처럼 단순해집니다. ([arXiv][1])
 
 이걸 딥러닝으로 옮길 때 중요한 점은:
 
@@ -17,9 +17,9 @@ $\mathop{\text{eml}}(x,y)=\exp(x)-\ln(y)$
 
 구조가 아니라,
 
-[
-\text{Linear} \rightarrow (u,v) \rightarrow \operatorname{EML}(u,v)
-]
+```math
+\text{Linear} \rightarrow (u,v) \rightarrow \mathop{	ext{eml}}(u,v)
+```
 
 구조로 가야 한다는 것입니다.
 
@@ -31,69 +31,69 @@ $\mathop{\text{eml}}(x,y)=\exp(x)-\ln(y)$
 
 입력 hidden state를 (H_l)라고 하면, 한 EMLStack block은 다음처럼 정의합니다.
 
-[
-Z_l = \operatorname{RMSNorm}(H_l)
-]
+```math
+Z_l = \mathop{/text{RMSNorm}}(H_l)
 
-[
+
+
 [U_l,V_l] = W_p Z_l + b
-]
+```
 
 여기서 (W_p)는 출력 차원이 (2m)인 선형층입니다.
 그 결과를 두 채널로 나눕니다.
 
-[
+```math
 U_l,V_l\in\mathbb{R}^{m}
-]
+```
 
 그리고 각 순서쌍 ((U_j,V_j))를 EML에 넣습니다.
 
-[
+```math
 E_l
 ===
 
-\operatorname{EML}(U_l,V_l)
-]
+\mathop{	ext{eml}}(U_l,V_l)
+```
 
 다만 순정 EML은 수치적으로 위험하므로 안정화된 형태를 씁니다.
 
-[
+```math
 U_{\text{safe}}
 ===============
 
 \frac{U_l}{1+|U_l|/c}
-]
 
-[
+
+
 V_{\text{pos}}
 ==============
 
-\operatorname{softplus}(V_l)+\epsilon
-]
+\mathop{\text{softplus}}(V_l)+\epsilon
 
-[
+
+
 E_l
 ===
 
 ## \exp(U_{\text{safe}})
 
 \ln(V_{\text{pos}})
-]
+```
 
 최종적으로 residual을 붙입니다.
 
-[
+```math
 H_{l+1}
 =======
 
 H_l
 +
 \lambda_l W_o E_l
-]
+```
 
 전체 블록은:
 
-[
+```math
 \boxed{
 H_{l+1}
 =======
@@ -112,11 +112,11 @@ H_l
 \right)
 \right]
 }
-]
 
-[
+
+
 [U_l,V_l]=W_p\operatorname{RMSNorm}(H_l)+b
-]
+```
 
 ---
 
@@ -124,9 +124,9 @@ H_l
 
 EML 자체가 이미 강한 비선형 연산입니다.
 
-[
-\operatorname{eml}(u,v)=e^u-\ln v
-]
+```math
+\mathop{	ext{eml}}(u,v)=e^u-\ln v
+```
 
 여기에는 exponential branch와 logarithmic branch가 모두 들어 있습니다.
 따라서 ReLU, GELU, SiLU 같은 pointwise activation을 추가하면 구조가 중복됩니다.
@@ -150,9 +150,7 @@ residual은 선택사항이 아니라 거의 필수입니다.
 
 순수하게
 
-[
-H_{l+1}=\operatorname{EMLBlock}(H_l)
-]
+$H_{l+1}=\operatorname{EMLBlock}(H_l)$
 
 로 두면 매 layer가 representation 전체를 덮어씁니다. EML은 (e^u) 때문에 쉽게 폭주하고, (-\ln v) 때문에 (v\to0) 근방에서 불안정해집니다.
 
@@ -160,9 +158,7 @@ H_{l+1}=\operatorname{EMLBlock}(H_l)
 
 residual을 쓰면 EML block은 전체 표현을 갈아엎는 것이 아니라,
 
-[
-H_{l+1}=H_l+\lambda_l\Delta H_l
-]
+$H_{l+1}=H_l+\lambda_l\Delta H_l$
 
 처럼 작은 correction을 추가합니다.
 
@@ -182,20 +178,18 @@ exp branch는 반드시 제어해야 합니다.
 
 처음에는
 
-[
-U_{\text{safe}}=c\tanh(U/c)
-]
+$U_{\text{safe}}=c\tanh(U/c)$
 
 를 생각할 수 있지만, `tanh`는 포화가 너무 빠릅니다. 대신 softsign clamp가 더 낫습니다.
 
-[
+```math
 U_{\text{safe}}
 ===============
 
 \frac{U}{1+|U|/c}
-]
+```
 
-이 방식은 (U_{\text{safe}}\in(-c,c))로 exp 입력을 제한하면서도, gradient가 `tanh`보다 천천히 죽습니다.
+이 방식은 ($U_{\text{safe}}\in(-c,c)$)로 exp 입력을 제한하면서도, gradient가 `tanh`보다 천천히 죽습니다.
 
 | 방식             | 장점         | 단점                     |
 | -------------- | ---------- | ---------------------- |
@@ -206,9 +200,7 @@ U_{\text{safe}}
 
 초기값은 보수적으로:
 
-[
-c=3\sim5
-]
+$c=3\sim5$
 
 정도가 적절합니다.
 
@@ -251,13 +243,11 @@ c=3\sim5
 
 중간식을 하나 정의합니다.
 
-[
-g(x,y)=\operatorname{eml}(x,y)
-]
+$g(x,y)=\mathop{	ext{eml}}(x,y)$
 
 그다음 이 (g)를 여러 번 재사용하는 함수를 만듭니다.
 
-[
+```math
 f_k(x,y)
 ========
 
@@ -269,7 +259,7 @@ a_i
 
 \ln(\beta_i+\gamma_i g(x,y)^2)
 \right]
-]
+```
 
 여기서 기존 tree는 (g(x,y))를 여러 branch에 반복 복사해야 합니다.
 EMLStack은 첫 layer에서 (g)를 만들고, 다음 layer에서 재사용할 수 있습니다.
@@ -278,24 +268,24 @@ EMLStack은 첫 layer에서 (g)를 만들고, 다음 layer에서 재사용할 �
 
 ### B. Deep EML chain
 
-[
+```math
 g_0(x,y)=x
-]
 
-[
+
+
 g_{t+1}(x,y)
 ============
 
-\operatorname{eml}(s(g_t),y)
-]
+\mathop{	ext{eml}}(s(g_t),y)
 
-[
+
+
 s(z)=\frac{z}{1+|z|/c}
-]
 
-[
+
+
 f_L(x,y)=g_L(x,y)
-]
+```
 
 이건 기존 EML tree의 depth 한계를 직접 찌르는 benchmark입니다.
 다만 모델 구조와 target generator가 너무 비슷해 보일 수 있으므로 보조 실험으로 두는 편이 낫습니다.
@@ -305,19 +295,19 @@ f_L(x,y)=g_L(x,y)
 예를 들어:
 
 [
-z_1=\operatorname{eml}(x,y)
+z_1=\mathop{	ext{eml}}(x,y)
 ]
 
 [
-z_2=\operatorname{eml}(z_1,1)
+z_2=\mathop{	ext{eml}}(z_1,1)
 ]
 
 [
-z_3=\operatorname{eml}(1,z_1)
+z_3=\mathop{	ext{eml}}(1,z_1)
 ]
 
 [
-z_4=\operatorname{eml}(z_2,z_3)
+z_4=\mathop{	ext{eml}}(z_2,z_3)
 ]
 
 [
