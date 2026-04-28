@@ -4,9 +4,9 @@
 
 EML 논문의 기본 연산자는
 
-[
+```{math}
 \operatorname{eml}(x,y)=\exp(x)-\ln(y)
-]
+```{math}
 
 입니다.
 
