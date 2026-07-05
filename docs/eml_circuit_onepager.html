@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EML Circuit — 개발 활동 증빙서</title>
+  <title>EML Circuit — One-page Brief</title>
   <style>
     :root {
       --ink: #132832;
@@ -79,11 +79,6 @@
       line-height: .9;
       letter-spacing: -.045em;
       text-transform: uppercase;
-    }
-
-    h1.evidence-title {
-      font-size: 31pt;
-      letter-spacing: -.055em;
     }
 
     .deck {
@@ -438,77 +433,6 @@
       letter-spacing: .06em;
     }
 
-    .identity {
-      display: flex;
-      gap: 8mm;
-      margin-top: 3.5mm;
-      color: var(--ink);
-      font: 700 7.5pt/1.2 "Aptos Mono", "D2Coding", monospace;
-    }
-
-    .identity span {
-      min-width: 44mm;
-      padding-bottom: 1mm;
-      border-bottom: .3mm solid var(--line);
-    }
-
-    .evidence-card {
-      background: var(--ink);
-      color: var(--white);
-      padding: 4.5mm 5mm;
-      border-top: 2mm solid var(--yellow);
-    }
-
-    .evidence-card small {
-      display: block;
-      margin-bottom: 2mm;
-      color: #afc7c7;
-      font: 700 7pt/1 "Aptos Mono", "D2Coding", monospace;
-      letter-spacing: .1em;
-    }
-
-    .evidence-card strong {
-      display: block;
-      margin-bottom: 1mm;
-      color: var(--yellow);
-      font-size: 12pt;
-    }
-
-    .evidence-card p {
-      margin: 0;
-      font: 7.2pt/1.45 "Aptos Mono", "D2Coding", monospace;
-    }
-
-    .commit-list {
-      display: grid;
-      gap: 1.7mm;
-    }
-
-    .commit {
-      display: grid;
-      grid-template-columns: 15mm 1fr;
-      gap: 3mm;
-      padding: 2.3mm 3mm;
-      border-left: 1.2mm solid var(--teal);
-      background: rgba(255, 253, 246, .8);
-    }
-
-    .commit code {
-      color: var(--teal);
-      font: 800 7pt/1.35 "Aptos Mono", "D2Coding", monospace;
-    }
-
-    .commit strong {
-      display: block;
-      margin-bottom: .6mm;
-      font-size: 7.2pt;
-    }
-
-    .commit span {
-      color: var(--muted);
-      font-size: 6.8pt;
-    }
-
     @media screen {
       .sheet { box-shadow: 0 8px 30px rgba(0, 0, 0, .2); }
     }
@@ -523,88 +447,83 @@
   <article class="sheet">
     <header>
       <div>
-        <p class="kicker">Software development activity · Evidence sheet</p>
-        <h1 class="evidence-title">개발 활동 증빙서</h1>
+        <p class="kicker">Residual circuit learning · PyTorch</p>
+        <h1>EML Circuit</h1>
         <p class="deck">
-          <strong>프로젝트 · EML Circuit</strong><br>
-          EML 연산을 residual neural block으로 구현하고 MLP·symbolic tree와
-          동일 조건에서 비교할 수 있는 PyTorch 실험 환경을 개발했다.
+          EML 연산을 안정적인 residual neural block으로 구현하고,
+          MLP와 symbolic tree 기준 모델을 같은 벤치마크에서 비교하는 실험용 저장소.
         </p>
-        <div class="identity">
-          <span>활동자 __________________</span>
-          <span>소속 __________________</span>
-        </div>
       </div>
-      <div class="evidence-card">
-        <small>REPOSITORY RECORD</small>
-        <strong>2026. 04. 28.</strong>
-        <p>Git commits 20건</p>
-        <p>검증일 2026. 07. 05.</p>
-        <p>Python ≥ 3.10 · PyTorch ≥ 2.2</p>
+      <div class="formula-card">
+        <small>Core primitive</small>
+        <div class="formula"><em>eml</em>(x, y) = e<sup>x</sup> − ln(y)</div>
       </div>
     </header>
 
     <main>
       <section class="pipeline">
-        <h2 class="section-label">활동 수행 내용</h2>
+        <h2 class="section-label">입력에서 예측까지 · EMLStack</h2>
         <div class="flow">
           <div class="step">
             <span class="number">1</span>
-            <h3>연산 설계</h3>
-            <p>exp/log 기반 EML 연산의 수치 불안정성을 분석하고 안전한 branch 변환을 설계했다.</p>
-            <p class="mono" style="margin-top:3mm;color:#087d7a;font-weight:800;">functional.py</p>
+            <h3>2D 입력</h3>
+            <p>합성 benchmark에서 두 변수의 함수 관계를 학습한다.</p>
+            <div class="terminals">
+              <span class="terminal">x0</span>
+              <span class="terminal">x1</span>
+            </div>
           </div>
           <div class="arrow">→</div>
           <div class="step">
             <span class="number">2</span>
-            <h3>모델 구현</h3>
-            <p>RMSNorm, pair projection, stabilized EML, residual update를 하나의 block으로 구현했다.</p>
-            <p class="mono" style="margin-top:3mm;color:#087d7a;font-weight:800;">layers.py · models.py</p>
+            <h3>Hidden projection</h3>
+            <p>입력을 hidden channel로 투영해 중간 계산을 저장하고 재사용한다.</p>
+            <p class="mono" style="margin-top:3mm;color:#087d7a;font-weight:800;">2 → hidden_dim 16</p>
           </div>
           <div class="arrow">→</div>
           <div class="step">
             <span class="number">3</span>
-            <h3>비교 실험 구축</h3>
-            <p>EMLStack·MLP·EML Tree를 같은 dataset과 metric으로 실행하는 benchmark를 만들었다.</p>
-            <p class="mono" style="margin-top:3mm;color:#087d7a;font-weight:800;">benchmarks.py · training.py</p>
+            <h3>Residual EML × depth</h3>
+            <p>안정화된 exp/log branch를 residual 경로에 쌓아 circuit을 학습한다.</p>
+            <p class="mono" style="margin-top:3mm;color:#087d7a;font-weight:800;">width 8 · depth 2</p>
           </div>
           <div class="arrow">→</div>
           <div class="step">
             <span class="number">4</span>
-            <h3>실행·검증</h3>
-            <p>단일/suite runner, checkpoint, 진행 로그와 unit test를 구성해 재현성을 확인했다.</p>
-            <p class="mono" style="margin-top:3mm;color:#b9401e;font-weight:800;">examples/ · tests/</p>
+            <h3>Regression output</h3>
+            <p>학습된 circuit 표현을 하나의 연속값으로 투영해 목표 함수를 근사한다.</p>
+            <p class="mono" style="margin-top:3mm;color:#b9401e;font-weight:800;">hidden_dim 16 → ŷ</p>
           </div>
         </div>
       </section>
 
       <section class="two-col">
         <div>
-          <h2 class="section-label">핵심 구현 근거</h2>
+          <h2 class="section-label">Residual EML block 내부</h2>
           <div class="principles">
             <article class="principle">
-              <strong>안정화 연산</strong>
-              <p>U/(1+|U|/c)와 softplus(V)+ε를 적용해 exp 범위와 log 정의역을 제어했다.</p>
+              <strong>01 · Normalize + Pair</strong>
+              <p>RMSNorm 이후 하나의 projection을 U와 V 두 branch로 나눈다.</p>
             </article>
             <article class="principle">
-              <strong>Residual circuit</strong>
-              <p>H′=H+λWₒE 구조로 중간 표현을 누적하고 작은 λ 초기값으로 학습을 안정화했다.</p>
+              <strong>02 · Stabilized EML</strong>
+              <p>U는 softsign으로 제한하고 V는 softplus로 양수화해 exp/log를 안정화한다.</p>
             </article>
             <article class="principle">
-              <strong>비교 기준</strong>
-              <p>tree 3종과 MLP 3종 benchmark에서 train/extrap MSE를 공통 측정한다.</p>
+              <strong>03 · Residual update</strong>
+              <p>작게 초기화한 λ와 output projection을 거쳐 H에 다시 더한다.</p>
             </article>
           </div>
         </div>
         <aside>
-          <h2 class="section-label">정량 증빙</h2>
+          <h2 class="section-label">기본 실험 설정</h2>
           <div class="config">
             <dl>
-              <dt>git_commits</dt><dd>20</dd>
-              <dt>tracked_files</dt><dd>32</dd>
-              <dt>python_files</dt><dd>11</dd>
-              <dt>python_lines</dt><dd>1,815</dd>
-              <dt>unit_tests</dt><dd>11 PASS</dd>
+              <dt>hidden_dim</dt><dd>16</dd>
+              <dt>depth</dt><dd>2</dd>
+              <dt>width</dt><dd>8 · auto</dd>
+              <dt>optimizer</dt><dd>AdamW</dd>
+              <dt>learning_rate</dt><dd>3e−3</dd>
             </dl>
           </div>
         </aside>
@@ -612,52 +531,55 @@
 
       <section class="bottom">
         <div>
-          <h2 class="section-label">대표 Git 변경 기록</h2>
-          <div class="commit-list">
-            <article class="commit">
-              <code>605151d</code>
-              <div><strong>BenchmarkSpec registry 및 benchmark utility 추가</strong><span>2026-04-28</span></div>
+          <h2 class="section-label">두 개의 비교 축</h2>
+          <div class="benchmarks">
+            <article class="benchmark">
+              <b>T</b>
+              <div>
+                <strong>TREE GROUP · 3 benchmarks</strong>
+                <span>공유 부분식, 깊은 chain, circuit 재사용 — EMLStack ↔ EML Tree</span>
+              </div>
             </article>
-            <article class="commit">
-              <code>89a269f</code>
-              <div><strong>공통 regression training pipeline 구현</strong><span>2026-04-28</span></div>
+            <article class="benchmark">
+              <b>M</b>
+              <div>
+                <strong>MLP GROUP · 3 benchmarks</strong>
+                <span>GELU, ReLU, SiLU 기반 목표 함수 — EMLStack ↔ MLP</span>
+              </div>
             </article>
-            <article class="commit">
-              <code>e8b91ee</code>
-              <div><strong>multi-process benchmark spawn 문제 수정</strong><span>2026-04-28</span></div>
-            </article>
-            <article class="commit">
-              <code>9d56145</code>
-              <div><strong>target normalization 및 tree metadata 추가</strong><span>2026-04-28</span></div>
+            <article class="benchmark">
+              <b>↗</b>
+              <div>
+                <strong>TRAIN ↔ EXTRAPOLATION</strong>
+                <span>학습 영역 안의 적합도와 바깥 영역의 일반화를 함께 측정</span>
+              </div>
             </article>
           </div>
         </div>
 
         <article class="output">
           <div>
-            <h2 class="section-label">검증 결과</h2>
-            <h3>Unit test 11건 통과</h3>
-            <p class="readout" style="font-size:9.5pt;font-family:'Aptos Mono','D2Coding',monospace;font-style:normal;">
-              python -m unittest discover -s tests -v
-            </p>
+            <h2 class="section-label">Repository scope</h2>
+            <h3>하나의 runner, 세 가지 모델</h3>
+            <p class="readout">EMLStack · MLP · EML Tree</p>
             <p class="note">
-              2026-07-05 로컬 실행 결과: 기능 함수, block/stack shape, regressor 출력,
-              dataset 생성, model factory, EMLStack 학습, EML Tree 탐색 테스트가 모두 통과했다.
+              동일한 dataset 생성, metric, checkpoint 형식을 공유한다. 단일 실험부터
+              benchmark suite와 multi-GPU 작업 분배까지 한 흐름으로 실행할 수 있다.
             </p>
           </div>
           <div class="metrics">
-            <span class="metric">RESULT · OK</span>
-            <span class="metric">11 / 11 PASS</span>
-            <span class="metric">runtime · 12.082 s</span>
-            <span class="metric">exit code · 0</span>
+            <span class="metric">train_mse</span>
+            <span class="metric">extrap_mse</span>
+            <span class="metric">trainable_parameters</span>
+            <span class="metric">best_epoch / score</span>
           </div>
         </article>
       </section>
     </main>
 
     <footer>
-      <strong>EML CIRCUIT · ACTIVITY EVIDENCE</strong>
-      <span>근거: Git history · source files · tests/test_eml_circuit.py</span>
+      <strong>EML CIRCUIT · v0.1.0</strong>
+      <span>Residual EML layers · benchmark utilities · PyTorch ≥ 2.2</span>
     </footer>
   </article>
 </body>
